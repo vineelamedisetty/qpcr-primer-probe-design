@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+qpcr_assays.csv
+qpcr_report.html
+oligos.fasta
+.DS_Store
