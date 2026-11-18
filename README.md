@@ -1,3 +1,6 @@
+Live Application
+Access the web version of the tool here: https://vineelamedisetty.github.io/qpcr-primer-probe-design/
+
 # qPCR Primer & Probe Design for Pathogen Detection
 
 Designs TaqMan primer/probe sets from a FASTA target, scoring candidates on
