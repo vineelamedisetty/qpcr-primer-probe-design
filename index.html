@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>qPCR Assay Designer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{--bg:#f4f7f8;--panel:#fff;--ink:#14222b;--mute:#5b6b75;--line:#d5dee3;--fwd:#0e7c86;--rev:#b4467a;--prb:#b57a00;--acc:#0e7c86;--accfg:#fff;--warn:#fff4d6;--warnfg:#5a4300;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a20;--panel:#162630;--ink:#e6eef2;--mute:#92a5b0;--line:#2b404c;--fwd:#4cc3cd;--rev:#ef8fba;--prb:#f0b429;--acc:#4cc3cd;--accfg:#0b1418;--warn:#3a3012;--warnfg:#f3dfa0;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1a20;--panel:#162630;--ink:#e6eef2;--mute:#92a5b0;--line:#2b404c;--fwd:#4cc3cd;--rev:#ef8fba;--prb:#f0b429;--acc:#4cc3cd;--accfg:#0b1418;--warn:#3a3012;--warnfg:#f3dfa0;color-scheme:dark}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
+.mono,textarea,td.s,.amp{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+main{max-width:1080px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.6rem;margin:0 0 4px;font-weight:600;letter-spacing:-.01em}
+.sub{color:var(--mute);margin:0 0 16px;max-width:70ch}
+.warn{background:var(--warn);color:var(--warnfg);padding:10px 12px;border-radius:6px;margin-bottom:16px;max-width:80ch}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:16px}
+label{display:block;font-size:.85rem;color:var(--mute);margin-bottom:4px}
+textarea{width:100%;min-height:150px;resize:vertical;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:10px;font-size:.82rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-top:14px}
+input[type=number]{width:100%;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font:inherit}
+.row{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center}
+button{font:inherit;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 14px;cursor:pointer}
+button.go{background:var(--acc);color:var(--accfg);border-color:var(--acc);font-weight:600}
+button:focus-visible,input:focus-visible,textarea:focus-visible,tr:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+#status{color:var(--mute)}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.85rem;min-width:820px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--mute);font-weight:500}
+td.n{text-align:right}
+tbody tr{cursor:pointer}
+tbody tr:hover,tbody tr.sel{background:var(--bg)}
+.f{color:var(--fwd)}.r{color:var(--rev)}.p{color:var(--prb)}
+.amp{font-size:.85rem;line-height:1.9;word-break:break-all;margin-top:8px}
+.amp .F{background:color-mix(in srgb,var(--fwd) 30%,transparent);border-bottom:2px solid var(--fwd)}
+.amp .R{background:color-mix(in srgb,var(--rev) 30%,transparent);border-bottom:2px solid var(--rev)}
+.amp .P{background:color-mix(in srgb,var(--prb) 32%,transparent);border-bottom:2px solid var(--prb)}
+.legend span{margin-right:14px;font-size:.85rem}
+textarea.out{min-height:110px}
+h2{font-size:1.05rem;margin:0 0 4px}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>qPCR assay designer</h1>
+<p class="sub">Paste a target sequence and get ranked primer pairs with a TaqMan probe. Everything runs in your browser, using the same filters and scoring as your Python script.</p>
+<div class="warn">Specificity is not checked. Copy the BLAST FASTA below and screen every oligo against the host and near-neighbour genomes before ordering.</div>
+
+<section class="panel">
+<label for="fa">Target sequence (FASTA, one or more records, or plain bases)</label>
+<textarea id="fa" spellcheck="false" placeholder=">my_target description&#10;ACGT..."></textarea>
+<div class="grid" id="params"></div>
+<div class="row">
+<button class="go" id="run">Design assays</button>
+<button id="demo">Load demo sequence</button>
+<label class="mono" style="margin:0">or <input type="file" id="file" accept=".fa,.fasta,.fna,.txt"></label>
+<span id="status" role="status"></span>
+</div>
+</section>
+
+<section class="panel hide" id="res">
+<h2>Ranked assays</h2>
+<p class="sub" id="summary"></p>
+<div class="wrap"><table>
+<thead><tr><th>#</th><th>Forward primer</th><th>Reverse primer</th><th>Probe</th><th>Fwd Tm</th><th>Rev Tm</th><th>Probe Tm</th><th>Amplicon</th><th>Score</th></tr></thead>
+<tbody id="rows"></tbody></table></div>
+</section>
+
+<section class="panel hide" id="detail">
+<h2 id="dtitle">Amplicon</h2>
+<div class="legend"><span class="f">&#9632; forward primer</span><span class="p">&#9632; probe site</span><span class="r">&#9632; reverse primer site</span></div>
+<div class="amp" id="amp"></div>
+<div class="row">
+<button id="bcsv">Show CSV</button><button id="bfa">Show BLAST FASTA</button><button id="bcopy">Copy</button>
+</div>
+<textarea class="out hide" id="out" readonly></textarea>
+</section>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const FIELDS=[["ampMin","Min amplicon (bp)",70],["ampMax","Max amplicon (bp)",150],["tmMin","Min primer Tm (°C)",58],["tmMax","Max primer Tm (°C)",62],["gcMin","Min primer GC (%)",40],["gcMax","Max primer GC (%)",60],["na","Na⁺ (mM)",50],["conc","Primer (nM)",250],["top","Results",10]];
+$("params").innerHTML=FIELDS.map(f=>`<div><label for="${f[0]}">${f[1]}</label><input type="number" id="${f[0]}" value="${f[2]}" step="any"></div>`).join("");
+
+const K={minPL:18,maxPL:25,tmDiff:2,minBL:18,maxBL:30,bgcMin:30,bgcMax:80,pd:[6,12],gap:1,optAmp:100,maxSelf:8,max3p:3,hp:4,sep:20};
+const NN={AA:[-7.9,-22.2],TT:[-7.9,-22.2],AT:[-7.2,-20.4],TA:[-7.2,-21.3],CA:[-8.5,-22.7],TG:[-8.5,-22.7],GT:[-8.4,-22.4],AC:[-8.4,-22.4],CT:[-7.8,-21],AG:[-7.8,-21],GA:[-8.2,-22.2],TC:[-8.2,-22.2],CG:[-10.6,-27.2],GC:[-9.8,-24.4],GG:[-8,-19.9],CC:[-8,-19.9]};
+const memo=f=>{const m=new Map();return(...a)=>{const k=a.join("|");if(!m.has(k))m.set(k,f(...a));return m.get(k)}};
+const OK=/^[ACGT]+$/, PAIR={AT:1,TA:1,GC:1,CG:1}, pr=(a,b)=>PAIR[a+b];
+const rev=s=>[...s].reverse().join("");
+const rc=s=>rev(s).replace(/./g,c=>({A:"T",T:"A",G:"C",C:"G"}[c]));
+const gcp=s=>100*(s.split("").filter(c=>c==="G"||c==="C").length)/s.length;
+const tm=memo((s,C,na)=>{let h=0,e=0;for(let i=0;i<s.length-1;i++){const p=NN[s.substr(i,2)];h+=p[0];e+=p[1]}
+ for(const t of [s[0],s[s.length-1]]){if("GC".includes(t)){h+=.1;e+=-2.8}else{h+=2.3;e+=4.1}}
+ const tk=h*1000/(e+1.9872*Math.log(C/4)),f=gcp(s)/100,l=Math.log(na);
+ return 1/(1/tk+(4.29*f-3.95)*1e-5*l+9.4e-6*l*l)-273.15});
+const dup=memo((a,b)=>{const br=rev(b);let best=0;for(let sh=-(a.length-1);sh<br.length;sh++){let sc=0;for(let i=0;i<a.length;i++){const j=i-sh;if(j>=0&&j<br.length&&pr(a[i],br[j]))sc++}if(sc>best)best=sc}return best});
+const tp3=memo((a,b)=>{const t=a.slice(-5),br=rev(b);let best=0;for(let sh=-(t.length-1);sh<br.length;sh++){let run=0;for(let i=0;i<t.length;i++){const j=i-sh;if(j>=0&&j<br.length&&pr(t[i],br[j])){if(++run>best)best=run}else run=0}}return best});
+const hairpin=memo(s=>{let best=0,n=s.length;for(let i=0;i<n;i++)for(let j=i+4;j<n;j++){let st=0;while(i-st>=0&&j+st<n&&(j+st)-(i-st)-1>=3&&pr(s[i-st],s[j+st]))st++;if(st>best)best=st}return best});
+const homo=s=>/(.)\1{4}/.test(s);
+const clamp=s=>[...s.slice(-5)].filter(c=>c==="G"||c==="C").length;
+
+function primerOK(s,P){if(homo(s))return false;const c=clamp(s);if(c<1||c>3)return false;
+ return dup(s,s)<=K.maxSelf&&tp3(s,s)<=K.max3p&&hairpin(s)<=K.hp}
+
+function findPrimers(seq,P){const F=[],R=[],n=seq.length;
+ for(let st=0;st<=n-K.minPL;st++)for(let L=K.minPL;L<=K.maxPL;L++){const en=st+L;if(en>n)break;
+  const w=seq.slice(st,en);if(!OK.test(w))break;const g=gcp(w);if(g<P.gcMin||g>P.gcMax)continue;
+  const t=tm(w,P.conc,P.na);if(t<P.tmMin||t>P.tmMax)continue;
+  const o={seq:w,start:st,end:en,len:L,gc:g,tm:t};
+  if(primerOK(w,P))F.push(o);
+  if(primerOK(rc(w),P))R.push(o);}
+ return[F,R]}
+
+function buildProbes(seq,P){const out=[],n=seq.length;
+ for(let st=0;st<=n-K.minBL;st++)for(let L=K.minBL;L<=K.maxBL;L++){const en=st+L;if(en>n)break;
+  const plus=seq.slice(st,en);if(!OK.test(plus))break;
+  for(const o of [plus,rc(plus)]){const g=gcp(o);if(g<K.bgcMin||g>K.bgcMax||o[0]==="G"||homo(o))continue;
+   if(hairpin(o)>K.hp||dup(o,o)>K.maxSelf)continue;
+   out.push({seq:o,start:st,end:en,tm:tm(o,P.conc,P.na),gc:g,cg:[...o].filter(c=>c==="C").length-[...o].filter(c=>c==="G").length})}}
+ out.sort((a,b)=>a.start-b.start);return out}
+
+function selectProbe(cands,f,r){const lo=f.end+K.gap,hi=r.start-K.gap;if(hi-lo<K.minBL)return null;
+ const hp=Math.max(f.tm,r.tm),tl=hp+K.pd[0],th=hp+K.pd[1],tt=(tl+th)/2,mid=(f.start+r.end)/2;
+ let a=0,b=cands.length;while(a<b){const m=(a+b)>>1;if(cands[m].start<lo)a=m+1;else b=m}
+ let best=null,bk=null;
+ for(let i=a;i<cands.length;i++){const p=cands[i];if(p.start>hi-K.minBL)break;if(p.end>hi)continue;if(p.tm<tl||p.tm>th)continue;
+  const k=[-Math.min(p.cg,0),Math.abs(p.tm-tt),Math.abs((p.start+p.end)/2-mid)];
+  if(!bk||k[0]<bk[0]||(k[0]===bk[0]&&(k[1]<bk[1]||(k[1]===bk[1]&&k[2]<bk[2])))){bk=k;best=p}}
+ return best}
+
+function score(f,r,p,amp,cd,P){const opt=(P.tmMin+P.tmMax)/2,pt=Math.max(f.tm,r.tm)+(K.pd[0]+K.pd[1])/2;
+ return Math.round((100-2*Math.abs(f.tm-opt)-2*Math.abs(r.tm-opt)-3*Math.abs(f.tm-r.tm)-.2*Math.abs(f.gc-50)-.2*Math.abs(r.gc-50)
+  -Math.abs(p.tm-pt)-.1*Math.abs(p.gc-55)-.05*Math.abs(amp-K.optAmp)-1.5*Math.max(0,cd-K.max3p))*100)/100}
+
+function design(rec,P){const seq=rec.seq,[F,R]=findPrimers(seq,P);if(!F.length||!R.length)return[];
+ const probes=buildProbes(seq,P);if(!probes.length)return[];
+ const bk=Array.from({length:seq.length+1},()=>[]);R.forEach(r=>bk[r.start].push(r));
+ const out=[];
+ for(const f of F){const first=Math.max(f.end,f.start+P.ampMin-K.maxPL),last=Math.min(f.start+P.ampMax-K.minPL,seq.length);
+  for(let s=first;s<=last;s++)for(const r of bk[s]){const amp=r.end-f.start;if(amp<P.ampMin||amp>P.ampMax||Math.abs(f.tm-r.tm)>K.tmDiff)continue;
+   const ro=rc(r.seq);if(tp3(f.seq,ro)>K.max3p||tp3(ro,f.seq)>K.max3p)continue;
+   const cd=dup(f.seq,ro);if(cd>K.maxSelf)continue;
+   const p=selectProbe(probes,f,r);if(!p)continue;
+   out.push({target:rec.id,f,r,ro,p,amp,cd,seq,score:score(f,r,p,amp,cd,P)})}}
+ return out}
+
+function nonRedundant(a,limit){const kept=[];for(const x of a.sort((u,v)=>v.score-u.score)){
+ if(kept.every(k=>k.target!==x.target||Math.abs(x.f.start-k.f.start)>=K.sep)){kept.push(x);if(kept.length>=limit)break}}return kept}
+
+function parseFasta(t){const recs=[];let h=null,ch=[];const push=()=>{if(h!==null)recs.push({id:h.split(/\s+/)[0]||"unnamed",seq:ch.join("").toUpperCase()})};
+ for(let line of t.split(/\r?\n/)){line=line.trim();if(!line)continue;
+  if(line[0]===">"){push();h=line.slice(1).trim();ch=[]}else{if(h===null){h="pasted_sequence";ch=[]}ch.push(line.replace(/[\s\d]/g,""))}}
+ push();return recs.filter(r=>r.seq)}
+
+let shown=[],P0={};
+function readP(){const P={};for(const f of FIELDS)P[f[0]]=parseFloat($(f[0]).value);P.na=P.na/1000;P.conc=P.conc*1e-9;P.top=Math.max(1,P.top|0);return P}
+const f2=(x,d=1)=>x.toFixed(d);
+
+$("run").onclick=()=>{
+ const recs=parseFasta($("fa").value);
+ if(!recs.length){$("status").textContent="Paste a sequence or load the demo first.";return}
+ const P=readP();if(FIELDS.some(f=>Number.isNaN(P[f[0]]))||P.ampMin>P.ampMax||P.tmMin>P.tmMax){$("status").textContent="Check the parameters: every field needs a number, and each min must not exceed its max.";return}
+ $("status").textContent="Designing…";$("run").disabled=true;
+ setTimeout(()=>{try{
+  let all=[],lines=[];
+  for(const r of recs){const a=design(r,P);all=all.concat(a);const amb=[...r.seq].filter(c=>!"ACGT".includes(c)).length;
+   lines.push(`${r.id}: ${r.seq.length} bp${amb?`, ${amb} ambiguous base(s) skipped`:""}, ${a.length} valid assay(s)`)}
+  shown=nonRedundant(all,P.top);P0=P;
+  $("summary").textContent=lines.join(" · ");
+  $("rows").innerHTML=shown.map((a,i)=>`<tr tabindex="0" data-i="${i}"><td>${i+1}</td><td class="s f">${a.f.seq}</td><td class="s r">${a.ro}</td><td class="s p">${a.p.seq}</td><td class="n">${f2(a.f.tm)}</td><td class="n">${f2(a.r.tm)}</td><td class="n">${f2(a.p.tm)}</td><td class="n">${a.amp}</td><td class="n">${f2(a.score,2)}</td></tr>`).join("")
+   ||`<tr><td colspan="9">No assay met the criteria. Widen the amplicon range or the Tm window, or check the target for ambiguous bases.</td></tr>`;
+  $("res").classList.remove("hide");$("detail").classList.toggle("hide",!shown.length);
+  $("status").textContent=shown.length?`${shown.length} assay(s) found.`:"";
+  if(shown.length)select(0);
+ }catch(e){$("status").textContent="Something went wrong: "+e.message}
+ $("run").disabled=false},30)};
+
+function select(i){const a=shown[i];if(!a)return;
+ document.querySelectorAll("#rows tr").forEach(tr=>tr.classList.toggle("sel",+tr.dataset.i===i));
+ const s0=a.f.start,s1=a.r.end,seq=a.seq;let h="";
+ for(let k=s0;k<s1;k++){const c=k>=a.f.start&&k<a.f.end?"F":k>=a.r.start&&k<a.r.end?"R":k>=a.p.start&&k<a.p.end?"P":"";h+=c?`<span class="${c}">${seq[k]}</span>`:seq[k]}
+ $("dtitle").textContent=`Assay ${i+1} · ${a.target} · ${s0+1}–${s1} (${a.amp} bp)`;$("amp").innerHTML=h}
+$("rows").addEventListener("click",e=>{const tr=e.target.closest("tr");if(tr&&tr.dataset.i)select(+tr.dataset.i)});
+$("rows").addEventListener("keydown",e=>{if(e.key==="Enter"){const tr=e.target.closest("tr");if(tr&&tr.dataset.i)select(+tr.dataset.i)}});
+
+const FIELDS_CSV=["target","forward_primer","forward_start","forward_tm","forward_gc","reverse_primer","reverse_start","reverse_tm","reverse_gc","probe","probe_start","probe_tm","probe_gc","amplicon_size","cross_dimer","score"];
+function csv(){return[FIELDS_CSV.join(",")].concat(shown.map(a=>[a.target,a.f.seq,a.f.start+1,f2(a.f.tm,2),f2(a.f.gc),a.ro,a.r.start+1,f2(a.r.tm,2),f2(a.r.gc),a.p.seq,a.p.start+1,f2(a.p.tm,2),f2(a.p.gc),a.amp,a.cd,a.score].join(","))).join("\n")}
+function fasta(){return shown.map((a,i)=>`>assay${i+1}_F ${a.target} pos=${a.f.start+1}\n${a.f.seq}\n>assay${i+1}_R ${a.target} pos=${a.r.start+1}\n${a.ro}\n>assay${i+1}_P ${a.target} pos=${a.p.start+1}\n${a.p.seq}`).join("\n")}
+const show=t=>{const o=$("out");o.value=t;o.classList.remove("hide");o.focus();o.select()};
+$("bcsv").onclick=()=>show(csv());$("bfa").onclick=()=>show(fasta());
+$("bcopy").onclick=async()=>{const o=$("out");if(o.classList.contains("hide"))show(csv());try{await navigator.clipboard.writeText(o.value);$("status").textContent="Copied."}catch(e){o.select();$("status").textContent="Select the text and copy it (Ctrl/Cmd+C)."}};
+
+$("demo").onclick=()=>{let x=12345;const rnd=()=>(x=(x*1103515245+12345)&0x7fffffff)/0x7fffffff;
+ let s="";for(let i=0;i<420;i++)s+="ACGT"[Math.floor(rnd()*4)];
+ $("fa").value=">demo_synthetic random sequence, not a real pathogen\n"+s.match(/.{1,70}/g).join("\n")};
+$("file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$("fa").value=r.result};r.readAsText(f)};
+</script>
+</body>
+</html>
